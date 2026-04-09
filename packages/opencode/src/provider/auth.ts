@@ -161,11 +161,11 @@ export namespace ProviderAuth {
             }),
           ),
         )
-        const all = yield* Effect.promise(() => ModelsDev.get())
+        const providers = yield* Effect.promise(() => ModelsDev.get())
         return {
           ...plugin,
           ...Object.fromEntries(
-            Object.entries(all)
+            Object.entries(providers)
               .filter(([id, p]) => !plugin[id as ProviderID] && p.env.length > 0)
               .map(([id]) => [id, [{ type: "api" as const, label: "API Key" }]]),
           ),
