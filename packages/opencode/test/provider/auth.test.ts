@@ -13,158 +13,124 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
+async function auth(data: Record<string, object>, fn: () => Promise<void>) {
+  const p = path.join(Global.Path.data, "auth.json")
+  let saved: string | undefined
+  try {
+    saved = await Filesystem.readText(p)
+  } catch {}
+  try {
+    await Filesystem.write(p, JSON.stringify(data))
+    await fn()
+  } finally {
+    if (saved !== undefined) {
+      await Filesystem.write(p, saved)
+    } else {
+      await unlink(p).catch(() => undefined)
+    }
+  }
+}
+
 // --- Provider loading via stored API key auth ---
 
 test("provider loaded from stored api key auth", async () => {
   await using tmp = await tmpdir()
-  const authPath = path.join(Global.Path.data, "auth.json")
-  let prev: string | undefined
-  try {
-    prev = await Filesystem.readText(authPath)
-  } catch {}
-  try {
-    await Filesystem.write(
-      authPath,
-      JSON.stringify({
-        anthropic: { type: "api", key: "sk-test" },
-      }),
-    )
+  await auth({ anthropic: { type: "api", key: "sk-test" } }, async () => {
     const providers = await Instance.provide({
       directory: tmp.path,
       fn: () => Provider.list(),
     })
     expect(providers[ProviderID.anthropic]).toBeDefined()
-  } finally {
-    if (prev !== undefined) {
-      await Filesystem.write(authPath, prev)
-    } else {
-      await unlink(authPath).catch(() => undefined)
-    }
-  }
+  })
 })
 
 test("provider source is api when loaded from stored key", async () => {
   await using tmp = await tmpdir()
-  const authPath = path.join(Global.Path.data, "auth.json")
-  let prev: string | undefined
-  try {
-    prev = await Filesystem.readText(authPath)
-  } catch {}
-  try {
-    await Filesystem.write(
-      authPath,
-      JSON.stringify({
-        anthropic: { type: "api", key: "sk-test" },
-      }),
-    )
+  await auth({ anthropic: { type: "api", key: "sk-test" } }, async () => {
     const providers = await Instance.provide({
       directory: tmp.path,
       fn: () => Provider.list(),
     })
     expect(providers[ProviderID.anthropic]?.source).toBe("api")
-  } finally {
-    if (prev !== undefined) {
-      await Filesystem.write(authPath, prev)
-    } else {
-      await unlink(authPath).catch(() => undefined)
-    }
-  }
+  })
 })
 
 test("api key from auth storage is set on provider", async () => {
   await using tmp = await tmpdir()
-  const authPath = path.join(Global.Path.data, "auth.json")
-  let prev: string | undefined
-  try {
-    prev = await Filesystem.readText(authPath)
-  } catch {}
-  try {
-    await Filesystem.write(
-      authPath,
-      JSON.stringify({
-        anthropic: { type: "api", key: "sk-stored-key" },
-      }),
-    )
+  await auth({ anthropic: { type: "api", key: "sk-stored-key" } }, async () => {
     const providers = await Instance.provide({
       directory: tmp.path,
       fn: () => Provider.list(),
     })
     expect(providers[ProviderID.anthropic]?.key).toBe("sk-stored-key")
-  } finally {
-    if (prev !== undefined) {
-      await Filesystem.write(authPath, prev)
-    } else {
-      await unlink(authPath).catch(() => undefined)
-    }
-  }
+  })
 })
 
 // --- ProviderAuth.methods: built-in provider auth method types ---
 
 test("ProviderAuth.methods returns methods for github-copilot", async () => {
   await using tmp = await tmpdir()
-  const methods = await Instance.provide({
+  const all = await Instance.provide({
     directory: tmp.path,
     fn: () => ProviderAuth.methods(),
   })
-  const copilot = methods[ProviderID.make("github-copilot")]
-  expect(copilot).toBeDefined()
-  expect(copilot.length).toBeGreaterThan(0)
-  expect(copilot[0].type).toBe("oauth")
-  expect(copilot[0].label).toBe("Login with GitHub Copilot")
+  const found = all[ProviderID.make("github-copilot")]
+  expect(found).toBeDefined()
+  expect(found.length).toBeGreaterThan(0)
+  expect(found[0].type).toBe("oauth")
+  expect(found[0].label).toBe("Login with GitHub Copilot")
 })
 
 test("ProviderAuth.methods github-copilot oauth has deployment type prompt", async () => {
   await using tmp = await tmpdir()
-  const methods = await Instance.provide({
+  const all = await Instance.provide({
     directory: tmp.path,
     fn: () => ProviderAuth.methods(),
   })
-  const copilot = methods[ProviderID.make("github-copilot")]
-  const oauth = copilot.find((m) => m.type === "oauth")
-  expect(oauth).toBeDefined()
-  expect(oauth?.prompts).toBeDefined()
-  const deploymentPrompt = oauth?.prompts?.find((p) => p.key === "deploymentType")
-  expect(deploymentPrompt).toBeDefined()
-  expect(deploymentPrompt?.type).toBe("select")
+  const found = all[ProviderID.make("github-copilot")]
+  const method = found.find((m) => m.type === "oauth")
+  expect(method).toBeDefined()
+  expect(method?.prompts).toBeDefined()
+  const field = method?.prompts?.find((p) => p.key === "deploymentType")
+  expect(field).toBeDefined()
+  expect(field?.type).toBe("select")
 })
 
 test("ProviderAuth.methods returns methods for openai with both oauth and api types", async () => {
   await using tmp = await tmpdir()
-  const methods = await Instance.provide({
+  const all = await Instance.provide({
     directory: tmp.path,
     fn: () => ProviderAuth.methods(),
   })
-  const openai = methods[ProviderID.make("openai")]
-  expect(openai).toBeDefined()
-  expect(openai.length).toBeGreaterThan(1)
-  const types = openai.map((m) => m.type)
-  expect(types).toContain("oauth")
-  expect(types).toContain("api")
+  const found = all[ProviderID.make("openai")]
+  expect(found).toBeDefined()
+  expect(found.length).toBeGreaterThan(1)
+  expect(found.map((m) => m.type)).toContain("oauth")
+  expect(found.map((m) => m.type)).toContain("api")
 })
 
 test("ProviderAuth.methods returns api method for cloudflare-workers-ai", async () => {
   await using tmp = await tmpdir()
-  const methods = await Instance.provide({
+  const all = await Instance.provide({
     directory: tmp.path,
     fn: () => ProviderAuth.methods(),
   })
-  const workers = methods[ProviderID.make("cloudflare-workers-ai")]
-  expect(workers).toBeDefined()
-  expect(workers.length).toBeGreaterThan(0)
-  expect(workers[0].type).toBe("api")
+  const found = all[ProviderID.make("cloudflare-workers-ai")]
+  expect(found).toBeDefined()
+  expect(found.length).toBeGreaterThan(0)
+  expect(found[0].type).toBe("api")
 })
 
 test("ProviderAuth.methods returns api method for cloudflare-ai-gateway", async () => {
   await using tmp = await tmpdir()
-  const methods = await Instance.provide({
+  const all = await Instance.provide({
     directory: tmp.path,
     fn: () => ProviderAuth.methods(),
   })
-  const gateway = methods[ProviderID.make("cloudflare-ai-gateway")]
-  expect(gateway).toBeDefined()
-  expect(gateway.length).toBeGreaterThan(0)
-  expect(gateway[0].type).toBe("api")
+  const found = all[ProviderID.make("cloudflare-ai-gateway")]
+  expect(found).toBeDefined()
+  expect(found.length).toBeGreaterThan(0)
+  expect(found[0].type).toBe("api")
 })
 
 // --- ProviderAuth.callback error cases ---
