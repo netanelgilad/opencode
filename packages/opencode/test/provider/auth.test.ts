@@ -14,19 +14,19 @@ afterEach(async () => {
 })
 
 async function auth(data: Record<string, object>, fn: () => Promise<void>) {
-  const p = path.join(Global.Path.data, "auth.json")
+  const file = path.join(Global.Path.data, "auth.json")
   let saved: string | undefined
   try {
-    saved = await Filesystem.readText(p)
+    saved = await Filesystem.readText(file)
   } catch {}
   try {
-    await Filesystem.write(p, JSON.stringify(data))
+    await Filesystem.write(file, JSON.stringify(data))
     await fn()
   } finally {
     if (saved !== undefined) {
-      await Filesystem.write(p, saved)
+      await Filesystem.write(file, saved)
     } else {
-      await unlink(p).catch(() => undefined)
+      await unlink(file).catch(() => undefined)
     }
   }
 }
