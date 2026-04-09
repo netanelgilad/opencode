@@ -4,6 +4,7 @@ import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Plugin } from "../plugin"
+import { ModelsDev } from "./models"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
 import z from "zod"
@@ -134,7 +135,7 @@ export namespace ProviderAuth {
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
         const hooks = (yield* InstanceState.get(state)).hooks
-        return Record.map(hooks, (item) =>
+        const plugin = Record.map(hooks, (item) =>
           item.methods.map(
             (method): Method => ({
               type: method.type,
@@ -160,6 +161,15 @@ export namespace ProviderAuth {
             }),
           ),
         )
+        const all = yield* Effect.promise(() => ModelsDev.get())
+        return {
+          ...plugin,
+          ...Object.fromEntries(
+            Object.entries(all)
+              .filter(([id, p]) => !plugin[id as ProviderID] && p.env.length > 0)
+              .map(([id]) => [id, [{ type: "api" as const, label: "API Key" }]]),
+          ),
+        } as Record<ProviderID, Method[]>
       })
 
       const authorize = Effect.fn("ProviderAuth.authorize")(function* (input: {
@@ -168,6 +178,7 @@ export namespace ProviderAuth {
         inputs?: Record<string, string>
       }) {
         const { hooks, pending } = yield* InstanceState.get(state)
+        if (!hooks[input.providerID]) return
         const method = hooks[input.providerID].methods[input.method]
         if (method.type !== "oauth") return
 
